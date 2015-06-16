@@ -1,0 +1,92 @@
+#! /usr/bin/python
+import commands
+import re
+from itertools import chain
+
+
+#==========================#
+# Pyflakes & PEP-8 pre-commit hook #
+#==========================#
+
+def compile(pattern):
+    #shortcut to re.compile
+    any_symbol = "[a-zA-Z0-9_:;/.' ]"
+    return re.compile(pattern.replace("%any", any_symbol))
+
+# List of tuples (filename_pattern, [replacement_patterns]) with exceptions
+# which should be ignored during pyflakes check
+SKIP_RULES = [
+    # settings
+    (compile("%any*settings%any*.py$"),
+     [compile("%any*from%any*settings import \*%any*")]),
+    # migrations
+    (compile("^%any*migrations/%any*\.py$"),
+     [compile(".*")]),
+    # docs
+    (compile("^%any*docs/%any*\.py$"),
+     [compile(".*")]),
+    # inits
+    (compile("^%any*/__init__.py"), [compile("%any* imported but unused")]),
+    # urls
+    (compile("%any*[/]?urls.py"),
+     [compile("%any*[/]?urls.py:[0-9]*: "
+              "'from django.conf.urls.defaults import \*' %any*")]),
+    # fab_file
+    (compile("fabfile.py"),
+     [compile("fabfile\.py:[0-9]*: redefinition of "
+              "unused 'SUDO_EXPORT' %any*")]),
+    # lib directory
+    (compile("^lib/%any*"),
+     [compile(".*")])
+]
+
+
+def process_file(filename, checker='pyflakes'):
+    """
+    proccesses file in ``checker`` and returns its result.
+    skips some exceptions like
+    "from settings import *" in local settings
+    """
+    def remove(pattern, string):
+        #removes regexp pattern from string
+        return pattern.sub("", string).strip()
+
+    # skip non-python files
+    if not filename.endswith(".py"):
+        return
+
+    result = commands.getoutput("%s %s" % (checker, filename,))
+
+    for needle, replacements in SKIP_RULES:
+        if needle.match(filename):
+            for replacement in replacements:
+                result = remove(replacement, result)
+
+    return result
+
+
+def _pre_commit():
+    filenames = commands.getoutput("git diff --cached --name-only "
+        "--diff-filter=ACMRTUXB").split("\n")
+    pyflakes_results = (process_file(filename) for filename in filenames)
+    pep8_results = (process_file(filename, 'pep8 '
+                            '--ignore=E121,E122,E123,E124,E125,E126,E127,E128,E712')
+                    for filename in filenames)
+
+    print "Pre-commit checker: "
+    abort = False
+    for result in chain(pyflakes_results, pep8_results):
+        if result:
+            if not abort:
+                abort = True
+            print result
+
+    if abort:
+        print "Commit aborted."
+        exit(1)
+    print "OK"
+
+
+if __name__ == "__main__":
+    _pre_commit()
+    exit(0)

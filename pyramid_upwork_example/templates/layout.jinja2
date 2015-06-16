@@ -1,0 +1,13 @@
+<html>
+  <body>
+    <h1>Welcome to Pyramid_Upwork_example pp!</h1>
+    <form method="post" action="{{ request.route_url('logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ request.session.get_csrf_token() }}">
+        <p>Logged in as {{ request.session['auth.first_name']}} {{ request.session['auth.last_name']}} aka ``{{ request.session['auth.userid'] }}`` | <input type="submit" value="Logout"></p>
+    </form>
+
+    {% block body %}{% endblock %}
+
+  </body>
+</html>
+        
